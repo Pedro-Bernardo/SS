@@ -5,13 +5,9 @@ BinOp
 Call
 Compare
 Eq
-Eq
 Expr
 If
 int
-int
-Load
-Load
 Load
 Mod
 Module
