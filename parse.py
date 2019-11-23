@@ -101,6 +101,22 @@ class Str(Node):
         print("[STR] parsing ...")
         #TODO: what to do here ?
 
+class Expr(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        print(node['value'])
+        self.value = RightValue(node['value'])
+
+    def visit(self):
+        print("[EXPR] visiting ...")
+        return(self.value.visit())
+
+    def parse(self):
+        print("[EXPR] parsing ...")
+        print(self.value.visit())
+        #TODO: what to do here ?
+
+
 class RightValue(Node):
     #FIXME: needs a level 
     def __init__(self, node):
@@ -123,6 +139,7 @@ class RightValue(Node):
             self.node = Str(self.node)
             self.node.parse()
         elif self.node['ast_type'] == "Call":
+            print('\n\nTWICE\n\n')
             self.node = Call(self.node)
             self.node.parse()
         elif self.node['ast_type'] == "Num":
@@ -179,7 +196,7 @@ class Sequence(Node):
         st =[]
         for n in self.parsed_nodes:
             st.append(n.visit())
-            print(st)
+        print(st)
         return(", ".join(st))
 
     def parse(self):
@@ -191,10 +208,13 @@ class Sequence(Node):
                 assign_node.parse()
                 self.parsed_nodes.append(assign_node)
             elif  n['ast_type'] == "Expr":
-                print(n)
-                expr_node = RightValue(n["value"])
+                expr_node = RightValue(n['value'])
                 expr_node.parse()
                 self.parsed_nodes.append(expr_node)
+            elif  n['ast_type'] == "Name":
+                name_node = Name(n)
+                name_node.parse()
+                self.parsed_nodes.append(name_node)
             else:
                 print( n['ast_type'])
                 pass
