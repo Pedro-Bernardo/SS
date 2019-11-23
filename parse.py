@@ -11,6 +11,27 @@ class BinOpString(enum.Enum):
    Div = '/'
    Mod = '%'
 
+def retNode(node):
+    if node['ast_type'] == "Assign":
+        node = Assign(node['targets'], node['value'])
+    elif  node['ast_type'] == "Expr":
+        node = RightValue(node['value'])
+    elif node['ast_type'] == "BinOp":
+        node = BinOp(node['left'],node['right'],node['op']['ast_type'])
+    elif node['ast_type'] == "Name":
+        node = Name(node)
+    elif node['ast_type'] == "Str":
+        node = Str(node)
+    elif node['ast_type'] == "Call":
+        node = Call(node)
+    elif node['ast_type'] == "Num":
+        node = Num(node)
+    else:
+        print("SHOULD NEVER HAPPEN")
+        pass
+
+    return node
+        
 class Node():
     def visit(self):
         pass
@@ -24,15 +45,15 @@ class Leveled_Node():
 class Call(Node):
     def __init__(self, node):
         self.args = Sequence(node['args'])
+        self.args.parse()
         self.func = Name(node['func'])
     
     def visit(self):
-        print("[CALL] visiting ...")
         return("{}({})".format(self.func.visit(),self.args.visit()))    
 
     def parse(self):
-        print("[CALL] parsing ...")
         #Nothing to do here
+        pass
 
 class Name(Node):
     #FIXME: needs a level 
@@ -41,12 +62,11 @@ class Name(Node):
         self.type = node['ctx']['ast_type'] # Load / Store
 
     def visit(self):
-        print("[NAME] visiting ...")
         return(self.id)
 
     def parse(self):
-        print("[NAME] parsing ...")
         #TODO: what to do here ? 
+        pass
 
 class Str(Node):
     #FIXME: needs a level 
@@ -54,12 +74,11 @@ class Str(Node):
         self.value = node['s']
 
     def visit(self):
-        print("[STR] visiting ...")
-        return(self.value)
+        return("{}".format(self.value))  
 
     def parse(self):
-        print("[STR] parsing ...")
         #TODO: what to do here ?
+        pass
 
 class Num(Node):
     #FIXME: needs a level 
@@ -67,12 +86,11 @@ class Num(Node):
         self.node = int(node['n'])
 
     def visit(self):
-        print("[NUM] visiting ...")
         return(self.node.visit())
 
     def parse(self):
-        print("[NUM] parsing ...")
         #TODO: what to do here ? 
+        pass
         
 class int(Node):
     #FIXME: needs a level 
@@ -81,12 +99,11 @@ class int(Node):
         self.n_str = node['n_str']
 
     def visit(self):
-        print("[INT] visiting ...")
         return(self.n_str)
 
     def parse(self):
-        print("[INT] parsing ...")
         #TODO: what to do here ? 
+        pass
 
 class Str(Node):
     #FIXME: needs a level 
@@ -94,28 +111,11 @@ class Str(Node):
         self.value = node['s']
 
     def visit(self):
-        print("[STR] visiting ...")
         return(self.value)
 
     def parse(self):
-        print("[STR] parsing ...")
         #TODO: what to do here ?
-
-class Expr(Node):
-    #FIXME: needs a level 
-    def __init__(self, node):
-        print(node['value'])
-        self.value = RightValue(node['value'])
-
-    def visit(self):
-        print("[EXPR] visiting ...")
-        return(self.value.visit())
-
-    def parse(self):
-        print("[EXPR] parsing ...")
-        print(self.value.visit())
-        #TODO: what to do here ?
-
+        pass
 
 class RightValue(Node):
     #FIXME: needs a level 
@@ -123,30 +123,11 @@ class RightValue(Node):
         self.node = node
     
     def visit(self):
-        print("[RIGHTVALUE] visiting ...")
         return(self.node.visit())
 
     def parse(self):
-        print("[RIGHTVALUE] parsing ...")
-
-        if self.node['ast_type'] == "BinOp":
-            self.node = BinOp(self.node['left'],self.node['right'],self.node['op']['ast_type'])
-            self.node.parse()
-        elif self.node['ast_type'] == "Name":
-            self.node = Name(self.node)
-            self.node.parse()
-        elif self.node['ast_type'] == "Str":
-            self.node = Str(self.node)
-            self.node.parse()
-        elif self.node['ast_type'] == "Call":
-            print('\n\nTWICE\n\n')
-            self.node = Call(self.node)
-            self.node.parse()
-        elif self.node['ast_type'] == "Num":
-            self.node = Num(self.node)
-            self.node.parse()
-        else:
-            pass
+        self.node = retNode(self.node)
+        self.node.parse()
 
 class Assign(Node):
     #FIXME: python can have multiple values (i.e a,b = 2,3)
@@ -155,11 +136,9 @@ class Assign(Node):
         self.value = RightValue(value)
     
     def visit(self):
-        print("[ASSIGN] visiting ...")
         return("{}={}".format(self.targets.visit(),self.value.visit()))    
 
     def parse(self):
-        print("[ASSIGN] parsing ...")
         self.value.parse()
         self.targets.parse()
 
@@ -176,13 +155,9 @@ class BinOp(Node):
         #add more if needed
 
     def visit(self):
-        print("[BINOP] visiting ...")
-        self.left.visit()
-        self.right.visit()
         return("{}{}{} ".format(self.left.visit(),self.op.value,self.right.visit()))
 
     def parse(self):
-        print("[BINOP] parsing ...")
         self.left.parse()      
         self.right.parse()
 
@@ -192,47 +167,26 @@ class Sequence(Node):
         self.parsed_nodes = []  
 
     def visit(self):
-        print("[SEQUENCE] visiting ...")
         st =[]
         for n in self.parsed_nodes:
             st.append(n.visit())
-        print(st)
         return(", ".join(st))
 
     def parse(self):
-        print("[SEQUENCE] parsing ...")
         
         for n in self.nodes:
-            if n['ast_type'] == "Assign":
-                assign_node = Assign(n['targets'], n['value'])
-                assign_node.parse()
-                self.parsed_nodes.append(assign_node)
-            elif  n['ast_type'] == "Expr":
-                expr_node = RightValue(n['value'])
-                expr_node.parse()
-                self.parsed_nodes.append(expr_node)
-            elif  n['ast_type'] == "Name":
-                name_node = Name(n)
-                name_node.parse()
-                self.parsed_nodes.append(name_node)
-            else:
-                print( n['ast_type'])
-                pass
-        
-
-        
-
+            node = retNode(n)
+            node.parse()
+            self.parsed_nodes.append(node)  
 
 class Body(Node):
     def __init__(self, nodes):
         self.nodes = Sequence(nodes) 
 
     def visit(self):
-        print("[BODY] visiting ...")
-        self.nodes.visit()
+        return(self.nodes.visit())
 
     def parse(self):
-        print("[BODY] parsing ...")
         self.nodes.parse()
 
 class Module(Node):
@@ -240,11 +194,9 @@ class Module(Node):
         self.body = Body(ast['body'])
     
     def visit(self):
-        print("[MODULE] visiting body...")
-        self.body.visit()
+        return(self.body.visit())
     
     def parse(self):
-        print("[MODULE] parsing body...")
         self.body.parse()
 
 def parse(ast):
@@ -260,7 +212,7 @@ def Main():
     module = Module(ast)
     module.parse()
     
-    module.visit()
+    print(module.visit())
 
 if __name__ == '__main__':
     Main()
