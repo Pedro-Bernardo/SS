@@ -11,59 +11,199 @@ class Node():
 class Leveled_Node():
     pass
 
-class Assign(Node):
-    def __init__(self, targets, value):
-        self.targets = targets
-        self.value = value
+
+class Call(Node):
+    def __init__(self, node):
+        self.args = Sequence(node['args'])
+        self.func = Name(node['func'])
     
     def visit(self):
-        # visit all targets
-        # visit value
-        print(self.targets)
-        print(self.value)
+        print("[CALL] visiting ...")
+        print("{}({}) \n".format(self.func.visit(),self.args.visit()))    
 
     def parse(self):
-        print("target = {}".format(self.targets))
-        print("value = {}".format(self.value))
+        print("[CALL] parsing ...")
+        #Nothing to do here
+
+class Name(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.id = node['id']
+        self.type = node['ctx']['ast_type'] # Load / Store
+
+    def visit(self):
+        print("[NAME] visiting ...")
+        return(self.id)
+
+    def parse(self):
+        print("[NAME] parsing ...")
+        #TODO: what to do here ? 
+
+class Str(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.value = node['s']
+
+    def visit(self):
+        print("[STR] visiting ...")
+        return(self.value)
+
+    def parse(self):
+        print("[STR] parsing ...")
+        #TODO: what to do here ?
+
+class Num(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.node = int(node)
+
+    def visit(self):
+        print("[NUM] visiting ...")
+        return(self.node.visit())
+
+    def parse(self):
+        print("[NUM] parsing ...")
+        #TODO: what to do here ? 
+        
+class int(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.value = node['n']
+
+    def visit(self):
+        print("[INT] visiting ...")
+        return(self.value)
+
+    def parse(self):
+        print("[INT] parsing ...")
+        #TODO: what to do here ? 
+
+class Str(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.value = node['s']
+
+    def visit(self):
+        print("[STR] visiting ...")
+        print("value = {} \n".format(self.value))
+
+    def parse(self):
+        print("[STR] parsing ...")
+        #TODO: what to do here ?
+
+class RightValue(Node):
+    #FIXME: needs a level 
+    def __init__(self, node):
+        self.node = node
+    
+    def visit(self):
+        print("[RIGHTVALUE] visiting ...")
+        return(self.node.visit())
+
+    def parse(self):
+        print("[RIGHTVALUE] parsing ...")
+
+        if self.node['ast_type'] == "BinOp":
+            self.node = BinOp(self.node['left'],self.node['right'])
+            self.node.parse()
+        elif self.node['ast_type'] == "Name":
+            self.node = Name(self.node)
+            self.node.parse()
+        elif self.node['ast_type'] == "Str":
+            self.node = Str(self.node)
+            self.node.parse()
+        elif self.node['ast_type'] == "Call":
+            self.node = Call(self.node)
+            self.node.parse()
+        elif self.node['ast_type'] == "Num":
+            self.node = Num(self.node)
+            self.node.parse()
+        else:
+            pass
+
+class Assign(Node):
+    #FIXME: python can have multiple values (i.e a,b = 2,3)
+    def __init__(self, targets, value):
+        self.targets = RightValue(targets[0]) 
+        self.value = RightValue(value)
+    
+    def visit(self):
+        print("[ASSIGN] visiting ...")
+        print("{} = {} \n".format(self.targets.visit(),self.value.visit()))    
+
+    def parse(self):
+        print("[ASSIGN] parsing ...")
+        self.value.parse()
+        self.targets.parse()
+
+class BinOp(Node):
+    def __init__(self, left, right):
+        #maybe pode dar logo parse ?
+        self.left = RightValue(left)
+        self.right = RightValue(right) 
+
+    def visit(self):
+        print("[BINOP] visiting ...")
+        self.left.visit()
+        self.right.visit()
+
+    def parse(self):
+        print("[BINOP] parsing ...")
+        self.left.parse()      
+        self.right.parse()
 
 
-
-class Body(Node):
+class Sequence(Node):
     def __init__(self, nodes):
         self.nodes = nodes
         self.parsed_nodes = []  
 
     def visit(self):
-        # print(self.nodes)
-        for n in self.nodes:
-            self.nodes.visit()
+        print("[SEQUENCE] visiting ...")
+        for n in self.parsed_nodes:
+            n.visit()
 
     def parse(self):
+        print("[SEQUENCE] parsing ...")
         for n in self.nodes:
             if n['ast_type'] == "Assign":
                 assign_node = Assign(n['targets'], n['value'])
                 assign_node.parse()
                 self.parsed_nodes.append(assign_node)
+            
             else:
                 node = Node()
                 self.parsed_nodes.append(node)
+
+
+class Body(Node):
+    def __init__(self, nodes):
+        self.nodes = Sequence(nodes) 
+
+    def visit(self):
+        print("[BODY] visiting ...")
+        self.nodes.visit()
+
+    def parse(self):
+        print("[BODY] parsing ...")
+        self.nodes.parse()
 
 class Module(Node):
     def __init__(self, ast):
         self.body = Body(ast['body'])
     
     def visit(self):
+        print("[MODULE] visiting body...")
         self.body.visit()
     
     def parse(self):
+        print("[MODULE] parsing body...")
         self.body.parse()
 
 def parse(ast):
     if(ast['ast_type'] == "Module"):
         node = Module(ast['body'])
         node.parse()
-
-
 
 def Main():
     ast = {}
@@ -72,11 +212,8 @@ def Main():
     
     module = Module(ast)
     module.parse()
-
-    print(module.body.parsed_nodes)
-
     
-
+    module.visit()
 
 if __name__ == '__main__':
     Main()
