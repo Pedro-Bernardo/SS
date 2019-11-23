@@ -2,6 +2,15 @@
 
 import json
 
+import enum
+
+class BinOpString(enum.Enum):
+   Add = '+'
+   Sub = '-'
+   Mul = '*'
+   Div = '/'
+   Mod = '%'
+
 class Node():
     def visit(self):
         pass
@@ -19,7 +28,7 @@ class Call(Node):
     
     def visit(self):
         print("[CALL] visiting ...")
-        print("{}({}) \n".format(self.func.visit(),self.args.visit()))    
+        return("{}({})".format(self.func.visit(),self.args.visit()))    
 
     def parse(self):
         print("[CALL] parsing ...")
@@ -55,7 +64,7 @@ class Str(Node):
 class Num(Node):
     #FIXME: needs a level 
     def __init__(self, node):
-        self.node = int(node)
+        self.node = int(node['n'])
 
     def visit(self):
         print("[NUM] visiting ...")
@@ -68,11 +77,12 @@ class Num(Node):
 class int(Node):
     #FIXME: needs a level 
     def __init__(self, node):
-        self.value = node['n']
+        self.n = node['n']
+        self.n_str = node['n_str']
 
     def visit(self):
         print("[INT] visiting ...")
-        return(self.value)
+        return(self.n_str)
 
     def parse(self):
         print("[INT] parsing ...")
@@ -85,7 +95,7 @@ class Str(Node):
 
     def visit(self):
         print("[STR] visiting ...")
-        print("value = {} \n".format(self.value))
+        return(self.value)
 
     def parse(self):
         print("[STR] parsing ...")
@@ -104,7 +114,7 @@ class RightValue(Node):
         print("[RIGHTVALUE] parsing ...")
 
         if self.node['ast_type'] == "BinOp":
-            self.node = BinOp(self.node['left'],self.node['right'])
+            self.node = BinOp(self.node['left'],self.node['right'],self.node['op']['ast_type'])
             self.node.parse()
         elif self.node['ast_type'] == "Name":
             self.node = Name(self.node)
@@ -129,7 +139,7 @@ class Assign(Node):
     
     def visit(self):
         print("[ASSIGN] visiting ...")
-        print("{} = {} \n".format(self.targets.visit(),self.value.visit()))    
+        return("{}={}".format(self.targets.visit(),self.value.visit()))    
 
     def parse(self):
         print("[ASSIGN] parsing ...")
@@ -137,21 +147,27 @@ class Assign(Node):
         self.targets.parse()
 
 class BinOp(Node):
-    def __init__(self, left, right):
-        #maybe pode dar logo parse ?
+    def __init__(self, left, right, op):
         self.left = RightValue(left)
-        self.right = RightValue(right) 
+        self.right = RightValue(right)
+        if op == 'Add':
+            self.op = BinOpString.Add
+        elif op == 'Mod':
+            self.op = BinOpString.Mod
+        else:
+            pass
+        #add more if needed
 
     def visit(self):
         print("[BINOP] visiting ...")
         self.left.visit()
         self.right.visit()
+        return("{}{}{} ".format(self.left.visit(),self.op.value,self.right.visit()))
 
     def parse(self):
         print("[BINOP] parsing ...")
         self.left.parse()      
         self.right.parse()
-
 
 class Sequence(Node):
     def __init__(self, nodes):
@@ -160,20 +176,31 @@ class Sequence(Node):
 
     def visit(self):
         print("[SEQUENCE] visiting ...")
+        st =[]
         for n in self.parsed_nodes:
-            n.visit()
+            st.append(n.visit())
+            print(st)
+        return(", ".join(st))
 
     def parse(self):
         print("[SEQUENCE] parsing ...")
+        
         for n in self.nodes:
             if n['ast_type'] == "Assign":
                 assign_node = Assign(n['targets'], n['value'])
                 assign_node.parse()
                 self.parsed_nodes.append(assign_node)
-            
+            elif  n['ast_type'] == "Expr":
+                print(n)
+                expr_node = RightValue(n["value"])
+                expr_node.parse()
+                self.parsed_nodes.append(expr_node)
             else:
-                node = Node()
-                self.parsed_nodes.append(node)
+                print( n['ast_type'])
+                pass
+        
+
+        
 
 
 class Body(Node):
