@@ -11,7 +11,12 @@ class BinOpString(enum.Enum):
    Div = '/'
    Mod = '%'
 
-def retNode(node):
+class ComparatorOpString(enum.Enum): #TODO: add the rest
+   Eq = '=='
+   NotEq = '!='
+
+def retNode(node): #TODO: Refactor this, no need to give the entire node as an argument 
+    #FIXME: right value and sequence nodes can get different nodes 
     if node['ast_type'] == "Assign":
         node = Assign(node['targets'], node['value'])
     elif  node['ast_type'] == "Expr":
@@ -26,12 +31,33 @@ def retNode(node):
         node = Call(node)
     elif node['ast_type'] == "Num":
         node = Num(node)
+    elif node['ast_type'] == "If" :
+        node = If(node)  
+    elif node['ast_type'] == "While":
+        #node = While(node) #TODO: Not Implemented
+        pass
     else:
         print("SHOULD NEVER HAPPEN")
         pass
 
     return node
-        
+
+def getBinopStr(op): #add more if needed
+    if op == 'Add':
+        return(BinOpString.Add)
+    elif op == 'Mod':
+        return(BinOpString.Mod)
+    else:
+        pass
+
+def getComparatoropStr(op): #add more if needed
+    if op == 'Eq':
+        return(ComparatorOpString.Eq)
+    elif op == 'NotEq':
+        return(ComparatorOpString.NotEq)
+    else:
+        pass
+   
 class Node():
     def visit(self):
         pass
@@ -40,6 +66,40 @@ class Node():
 
 class Leveled_Node():
     pass
+
+
+class Comparator(Node):
+    def __init__(self, node):
+        self.ops = getComparatoropStr(node['ops'][0]['ast_type']) #FIXME : hardcoded the index ... maybe sequence node?
+        self.comparators = retNode(node['comparators'][0])
+        self.left = Name(node['left']) #FIXME: only name???
+    
+    def visit(self):
+        return("{}{}{}".format(self.left.visit(),self.ops.value, self.comparators.visit())) 
+            
+
+    def parse(self):
+        #TODO: parse the test
+        pass
+
+
+class If(Node):
+    def __init__(self, node):
+        self.body = Sequence(node['body'])
+        self.body.parse()
+
+        self.orelse = Sequence(node['orelse'])
+        self.orelse.parse()
+
+        self.test = Comparator(node['test']) #FIXME: can be more than a compare node!
+    
+    def visit(self):
+
+        return("if {}: {} else:{}".format(self.test.visit(),self.body.visit(), self.orelse.visit()))    
+
+    def parse(self):
+        #TODO: parse the test
+        pass
 
 
 class Call(Node):
@@ -142,18 +202,14 @@ class Assign(Node):
         self.value.parse()
         self.targets.parse()
 
+
 class BinOp(Node):
     def __init__(self, left, right, op):
         self.left = RightValue(left)
         self.right = RightValue(right)
-        if op == 'Add':
-            self.op = BinOpString.Add
-        elif op == 'Mod':
-            self.op = BinOpString.Mod
-        else:
-            pass
-        #add more if needed
-
+        self.op = getBinopStr(op)
+        
+    
     def visit(self):
         return("{}{}{} ".format(self.left.visit(),self.op.value,self.right.visit()))
 
@@ -173,7 +229,6 @@ class Sequence(Node):
         return(", ".join(st))
 
     def parse(self):
-        
         for n in self.nodes:
             node = retNode(n)
             node.parse()
@@ -206,7 +261,7 @@ def parse(ast):
 
 def Main():
     ast = {}
-    with open("proj-slices/slice1.json", "r") as f:
+    with open("proj-slices/slice7.json", "r") as f:
         ast = json.loads(f.read())
     
     module = Module(ast)
