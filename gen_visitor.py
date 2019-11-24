@@ -3,8 +3,8 @@ import argparse
 TEMPLATE = """class {}(Node):\n\tdef __init__(self, {}):\n\t\tpass\n\n\t def visit(self):\n\t\tpass\n\n\tdef parse(self):\n\t\tpass\n\n"""
 
 
-parser = argparse.ArgumentParser(prog='get_nodes', description="get ast_type python nodes from documentation page",
-                                     usage="python get_nodes <doc.html>")
+parser = argparse.ArgumentParser(prog='gen_visitor', description="receives a file with a list of class node definitions and outputs the corresponding node classes",
+                                     usage="python gen_visitor <nodes.txt>")
 parser.add_argument('filename', type=str)
 
 
