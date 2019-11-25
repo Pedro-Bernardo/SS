@@ -4,8 +4,6 @@ import json
 import enum
 import argparse
 
-
-
 class Level(enum.Enum):
     Tainted = True
     Untainted = False
@@ -47,6 +45,8 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
         node = Assign(node['targets'], node['value'])
     elif  node['ast_type'] == "Expr":
         node = RightValue(node['value'])
+    elif  node['ast_type'] == "NameConstant":
+        node = NameConstant(node['value'])
     elif node['ast_type'] == "BinOp":
         node = BinOp(node['left'],node['right'],node['op']['ast_type'])
     elif node['ast_type'] == "UnaryOp":
@@ -71,6 +71,7 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
         node = Compare(node['left'],node['ops'],node['comparators'])
     else:
         print("SHOULD NEVER HAPPEN")
+        print(node)
         pass
 
     return node
@@ -137,6 +138,20 @@ class Node():
         pass
     def visit(self):
         pass
+    def parse(self):
+        pass
+
+
+class NameConstant(Node):
+    def __init__(self, value):
+        self.value = value
+    
+    def print_node(self):
+        return self.value
+    
+    def visit(self):
+        pass
+
     def parse(self):
         pass
 
@@ -235,6 +250,9 @@ class While(Node):
 
 class Call(Node):
     def __init__(self, func, args):
+        print("CALL")
+        print(func)
+        print(args)
         self.args = Sequence(args)
         self.args.parse()
         self.func = Name(func['id'], func['ctx'])
