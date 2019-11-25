@@ -10,6 +10,7 @@ class Level(enum.Enum):
 
 SYMTAB = {}
 DEFAULT_LEVEL = Level.Untainted
+CONFIG = ""
 
 class BinOpString(enum.Enum):
     Add = '+'
@@ -501,8 +502,12 @@ def parse(ast):
         node.parse()
 
 
-def Main(filename):
+def Main(filename, config_file):
     ast = {}
+
+    with open(config_file, "r") as f:
+        CONFIG = json.loads(f.read())
+
     with open(filename, "r") as f:
     # with open(filename, "r") as f:
         ast = json.loads(f.read())
@@ -514,7 +519,8 @@ def Main(filename):
 parser = argparse.ArgumentParser(prog='parse', description="to be continued", 
             usage="python parse slice.json")
 parser.add_argument('filename', type=str)
+parser.add_argument('--config', type=str, default="config.json")
 
 if __name__ == '__main__':
     args = parser.parse_args()
-    Main(args.filename)
+    Main(args.filename, args.config)
