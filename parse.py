@@ -146,7 +146,6 @@ class Node():
 
 class Attribute(Node):
     def __init__(self, value, attr, ctx):
-        print("HERE")
         self.value = retNode(value)
         self.attr = attr
         self.ctx = getContext(ctx)
@@ -177,7 +176,6 @@ class NameConstant(Node):
 class Tuple(Node):
     def __init__(self, elts, ctx):
         self.elts = Sequence(elts)
-        self.elts.parse()
         self.ctx = getContext(ctx) # Load / Store
         self.level = DEFAULT_LEVEL
 
@@ -186,34 +184,31 @@ class Tuple(Node):
 
     def visit(self):
         pass
+
     def parse(self):
-        pass
+        self.elts.parse()
 
 class Compare(Node):
     def __init__(self, left, ops, comparators):
         self.left = RightValue(left)
         self.ops = [ getBoolopStr(op['ast_type']) for op in ops ]
         self.comparators = Sequence(comparators)
-        self.comparators.parse()
+
 
     def print_node(self):
         comparators = self.comparators.print_node().split(",")
-
         return "{} {}".format(self.left.print_node(), " ".join([op.value + " " + comp.strip() for op, comp in zip(self.ops, comparators)]))
 
     def visit(self):
         pass
+
     def parse(self):
-        pass
+        self.comparators.parse()
 
 class IfExp(Node):
     def __init__(self, body, orelse, test):
         self.body = RightValue(body)
-        self.body.parse()
-
         self.orelse = RightValue(orelse)
-        self.orelse.parse()
-
         self.test = retNode(test) #FIXME: can be more than a compare node!
     
     def print_node(self):
@@ -224,58 +219,52 @@ class IfExp(Node):
         pass
     def parse(self):
         #TODO: parse the test
-        pass
+        self.body.parse()
+        self.orelse.parse()
 
 
 class If(Node):
     def __init__(self, body, orelse, test):
         self.body = Sequence(body)
-        self.body.parse()
-
         self.orelse = Sequence(orelse)
-        self.orelse.parse()
-
         self.test = retNode(test) #FIXME: can be more than a compare node!
     
     def print_node(self):
-
         return("if {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
 
     def visit(self):
         pass
+
     def parse(self):
         #TODO: parse the test
-        pass
+        self.body.parse()
+        self.orelse.parse()
 
 class While(Node):
     def __init__(self, body, orelse, test):
         self.body = Sequence(body)
-        self.body.parse()
-
         self.orelse = Sequence(orelse)
-        self.orelse.parse()
-
         self.test = retNode(test) #FIXME: can be more than a compare node!
     
     def print_node(self):
-
         return("while {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
 
     def visit(self):
         pass
+
     def parse(self):
-        #TODO: parse the test
-        pass
+        self.body.parse()
+        self.orelse.parse()
 
 class Call(Node):
     def __init__(self, func, args):
         self.args = Sequence(args)
-        self.args.parse()
         self.func = retNode(func)   # Name(func['id'], func['ctx'])
         self.level = DEFAULT_LEVEL
     
     def print_node(self):
-        return("(level:{}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
+        # return("(level:{}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
+        return("{}({})".format(self.func.print_node(),self.args.print_node()))    
 
     def visit(self):
         self.args.visit()
@@ -286,6 +275,7 @@ class Call(Node):
 
     def parse(self):
         #Nothing to do here
+        self.args.parse()
         pass
 
 class Name(Node):
@@ -355,6 +345,7 @@ class int(Node):
 
     def visit(self):
         pass
+
     def parse(self):
         #TODO: what to do here ? 
         pass
@@ -365,7 +356,6 @@ class RightValue(Node):
     def __init__(self, node):
         self.level = DEFAULT_LEVEL
         self.node = retNode(node)
-        self.node.parse()
     
     def print_node(self):
         return(self.node.print_node())
@@ -375,7 +365,7 @@ class RightValue(Node):
         self.level = self.node.level
 
     def parse(self):
-        pass
+        self.node.parse()
 
 class Assign(Node):
     #TODO : FINISH 
@@ -387,8 +377,9 @@ class Assign(Node):
         self.level = DEFAULT_LEVEL
     
     def print_node(self):
-        self.visit()
-        return("(level: {}) {}={}".format(self.level, self.targets.print_node(),self.value.print_node()))    
+        # self.visit()
+        # return("(level: {}) {}={}".format(self.level, self.targets.print_node(),self.value.print_node()))    
+        return("{}={}".format(self.targets.print_node(),self.value.print_node()))    
 
     def visit(self):
         if isinstance(self.targets.node, Tuple):
@@ -425,12 +416,12 @@ class BinOp(Node):
         self.right = RightValue(right)
         self.op = getBinopStr(op)
         
-    
     def print_node(self):
         return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
 
     def visit(self):
         pass
+
     def parse(self):
         self.left.parse()      
         self.right.parse()
@@ -440,37 +431,34 @@ class BoolOp(Node):
         self.left = RightValue(left)
         self.right = RightValue(right)
         self.op = getBoolopStr(op)
-        
     
     def print_node(self):
         return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
 
     def visit(self):
         pass
+
     def parse(self):
         self.left.parse()      
         self.right.parse()
 
 class Sequence(Node):
     def __init__(self, nodes):
-        self.nodes = nodes
-        self.parsed_nodes = []  
+        self.nodes = []
+        for n in nodes:
+            self.nodes.append(retNode(n))
 
     def print_node(self):
         st =[]
-        for n in self.parsed_nodes:
+        for n in self.nodes:
             st.append(n.print_node())
         return(", ".join(st))
 
     def visit(self):
         pass
     def parse(self):
-        i = 0
         for n in self.nodes:
-            # print("{} : {}".format(i, n))
-            # i += 1
-            node = retNode(n)
-            self.parsed_nodes.append(node)  
+            n.parse()
 
 class Body(Node):
     def __init__(self, nodes):
