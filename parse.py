@@ -67,6 +67,8 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
         node = While(node['body'],node['orelse'],node['test'])  
     elif node['ast_type'] == "Tuple":
         node = Tuple(node['elts'], node['ctx'])
+    elif node['ast_type'] == "Attribute":
+        node = Attribute(node['value'], node['attr'], node['ctx'])
     elif node['ast_type'] == "Compare":
         node = Compare(node['left'],node['ops'],node['comparators'])
     else:
@@ -141,10 +143,26 @@ class Node():
     def parse(self):
         pass
 
+class Attribute(Node):
+    def __init__(self, value, attr, ctx):
+        print("HERE")
+        self.value = retNode(value)
+        self.attr = attr
+        self.ctx = getContext(ctx)
+
+    def print_node(self):
+        return "{}.{}".format(self.value.print_node(), self.attr)
+
+    def visit(self):
+        pass
+
+    def parse(self):
+        pass
 
 class NameConstant(Node):
     def __init__(self, value):
         self.value = value
+        self.level = DEFAULT_LEVEL
     
     def print_node(self):
         return self.value
@@ -250,12 +268,9 @@ class While(Node):
 
 class Call(Node):
     def __init__(self, func, args):
-        print("CALL")
-        print(func)
-        print(args)
         self.args = Sequence(args)
         self.args.parse()
-        self.func = Name(func['id'], func['ctx'])
+        self.func = retNode(func)   # Name(func['id'], func['ctx'])
         self.level = DEFAULT_LEVEL
     
     def print_node(self):
@@ -263,7 +278,8 @@ class Call(Node):
 
     def visit(self):
         self.args.visit()
-        for arg in self.args:
+        print(self.args)
+        for arg in self.args.parsed_nodes:
             if arg.level == Level.Tainted:
                 self.level = Level.Tainted
 
