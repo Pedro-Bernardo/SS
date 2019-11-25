@@ -1,0 +1,281 @@
+{
+    "ast_type": "Module",
+    "body": [
+        {
+            "ast_type": "Assign",
+            "col_offset": 0,
+            "lineno": 1,
+            "targets": [
+                {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Store"
+                    },
+                    "id": "a",
+                    "lineno": 1
+                }
+            ],
+            "value": {
+                "ast_type": "Num",
+                "col_offset": 4,
+                "lineno": 1,
+                "n": {
+                    "ast_type": "int",
+                    "n": 1,
+                    "n_str": "1"
+                }
+            }
+        },
+        {
+            "ast_type": "Assign",
+            "col_offset": 0,
+            "lineno": 2,
+            "targets": [
+                {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Store"
+                    },
+                    "id": "b",
+                    "lineno": 2
+                }
+            ],
+            "value": {
+                "ast_type": "Num",
+                "col_offset": 4,
+                "lineno": 2,
+                "n": {
+                    "ast_type": "int",
+                    "n": 2,
+                    "n_str": "2"
+                }
+            }
+        },
+        {
+            "ast_type": "Assign",
+            "col_offset": 0,
+            "lineno": 3,
+            "targets": [
+                {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Store"
+                    },
+                    "id": "c",
+                    "lineno": 3
+                }
+            ],
+            "value": {
+                "ast_type": "Tuple",
+                "col_offset": 5,
+                "ctx": {
+                    "ast_type": "Load"
+                },
+                "elts": [
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 5,
+                        "lineno": 3,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 1,
+                            "n_str": "1"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 8,
+                        "lineno": 3,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 2,
+                            "n_str": "2"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 11,
+                        "lineno": 3,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 3,
+                            "n_str": "3"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 14,
+                        "lineno": 3,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 4,
+                            "n_str": "4"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 17,
+                        "lineno": 3,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 5,
+                            "n_str": "5"
+                        }
+                    }
+                ],
+                "lineno": 3
+            }
+        },
+        {
+            "ast_type": "Assign",
+            "col_offset": 0,
+            "lineno": 4,
+            "targets": [
+                {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Store"
+                    },
+                    "id": "d",
+                    "lineno": 4
+                }
+            ],
+            "value": {
+                "ast_type": "Tuple",
+                "col_offset": 5,
+                "ctx": {
+                    "ast_type": "Load"
+                },
+                "elts": [
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 5,
+                        "lineno": 4,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 1,
+                            "n_str": "1"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 8,
+                        "lineno": 4,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 2,
+                            "n_str": "2"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 11,
+                        "lineno": 4,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 3,
+                            "n_str": "3"
+                        }
+                    },
+                    {
+                        "ast_type": "Num",
+                        "col_offset": 14,
+                        "lineno": 4,
+                        "n": {
+                            "ast_type": "int",
+                            "n": 4,
+                            "n_str": "4"
+                        }
+                    }
+                ],
+                "lineno": 4
+            }
+        },
+        {
+            "ast_type": "Expr",
+            "col_offset": 0,
+            "lineno": 6,
+            "value": {
+                "ast_type": "Compare",
+                "col_offset": 0,
+                "comparators": [
+                    {
+                        "ast_type": "Name",
+                        "col_offset": 9,
+                        "ctx": {
+                            "ast_type": "Load"
+                        },
+                        "id": "c",
+                        "lineno": 6
+                    },
+                    {
+                        "ast_type": "Name",
+                        "col_offset": 18,
+                        "ctx": {
+                            "ast_type": "Load"
+                        },
+                        "id": "d",
+                        "lineno": 6
+                    }
+                ],
+                "left": {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Load"
+                    },
+                    "id": "a",
+                    "lineno": 6
+                },
+                "lineno": 6,
+                "ops": [
+                    {
+                        "ast_type": "NotIn"
+                    },
+                    {
+                        "ast_type": "NotIn"
+                    }
+                ]
+            }
+        },
+        {
+            "ast_type": "Expr",
+            "col_offset": 0,
+            "lineno": 7,
+            "value": {
+                "ast_type": "Compare",
+                "col_offset": 0,
+                "comparators": [
+                    {
+                        "ast_type": "Name",
+                        "col_offset": 5,
+                        "ctx": {
+                            "ast_type": "Load"
+                        },
+                        "id": "c",
+                        "lineno": 7
+                    }
+                ],
+                "left": {
+                    "ast_type": "Name",
+                    "col_offset": 0,
+                    "ctx": {
+                        "ast_type": "Load"
+                    },
+                    "id": "b",
+                    "lineno": 7
+                },
+                "lineno": 7,
+                "ops": [
+                    {
+                        "ast_type": "In"
+                    }
+                ]
+            }
+        }
+    ]
+}

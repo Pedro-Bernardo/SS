@@ -1,19 +1,45 @@
 #!/usr/bin/env python3
 
 import json
-
 import enum
+import argparse
+
+
+
+class Level(enum.Enum):
+    Tainted = True
+    Untainted = False
+
+SYMTAB = {}
+DEFAULT_LEVEL = Level.Untainted
 
 class BinOpString(enum.Enum):
-   Add = '+'
-   Sub = '-'
-   Mul = '*'
-   Div = '/'
-   Mod = '%'
+    Add = '+'
+    Sub = '-'
+    Mul = '*'
+    Div = '/'
+    Mod = '%'
 
-class ComparatorOpString(enum.Enum): #TODO: add the rest
-   Eq = '=='
-   NotEq = '!='
+class UnaryOpString(enum.Enum):
+    UAdd = '+'
+    USub = '-'
+    Not = 'not'
+    Invert = '~'
+
+class BoolOpString(enum.Enum):
+    And = 'and'
+    Or = 'or'
+    Lt = '<'
+    Gt = '>'
+    Lte = '<='
+    Gte = '>='
+    Is = "is"
+    In = 'in'
+    NotIn = 'not in'
+    Eq = '=='
+    NotEq = '!='
+
+# class ComparatorOpString(enum.Enum): #TODO: add the rest
 
 def retNode(node): #TODO: Refactor this, no need to give the entire node as an argument 
     #FIXME: right value and sequence nodes can get different nodes 
@@ -23,30 +49,78 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
         node = RightValue(node['value'])
     elif node['ast_type'] == "BinOp":
         node = BinOp(node['left'],node['right'],node['op']['ast_type'])
+    elif node['ast_type'] == "UnaryOp":
+        node = UnaryOp(node['op']['ast_type'], node['operand'])
     elif node['ast_type'] == "Name":
-        node = Name(node)
+        node = Name(node['id'], node['ctx'])
     elif node['ast_type'] == "Str":
-        node = Str(node)
+        node = Str(node['s'])
     elif node['ast_type'] == "Call":
-        node = Call(node)
+        node = Call(node['func'],node['args'])
     elif node['ast_type'] == "Num":
-        node = Num(node)
+        node = Num(node['n'])
     elif node['ast_type'] == "If" :
-        node = If(node)  
-    elif node['ast_type'] == "While":
-        #node = While(node) #TODO: Not Implemented
-        pass
+        node = If(node['body'],node['orelse'],node['test'])  
+    elif node['ast_type'] == "IfExp" :
+        node = IfExp(node['body'],node['orelse'],node['test'])  
+    elif node['ast_type'] == "While" :
+        node = While(node['body'],node['orelse'],node['test'])  
+    elif node['ast_type'] == "Tuple":
+        node = Tuple(node['elts'], node['ctx'])
+    elif node['ast_type'] == "Compare":
+        node = Compare(node['left'],node['ops'],node['comparators'])
     else:
         print("SHOULD NEVER HAPPEN")
         pass
 
     return node
 
+def getContext(ctx):
+    return ctx['ast_type']
+    
+def getBoolopStr(op):
+    if op == 'And':
+        return(BoolOpString.And)
+    elif op == 'Or':
+        return(BoolOpString.Or)
+    elif op == 'Lt':
+        return(BoolOpString.Lt)
+    elif op == 'Gt':
+        return(BoolOpString.Gt)
+    elif op == 'Lte':
+        return(BoolOpString.Lte)
+    elif op == 'Gte':
+        return(BoolOpString.Gte)
+    elif op == 'Is':
+        return(BoolOpString.Is)
+    elif op == 'In':
+        return(BoolOpString.In)
+    elif op == 'NotIn':
+        return(BoolOpString.NotIn)
+    elif op == 'Eq':
+        return(BoolOpString.Eq)
+    elif op == 'NotEq':
+        return(BoolOpString.NotEq)
+    else:
+        pass
+
 def getBinopStr(op): #add more if needed
     if op == 'Add':
         return(BinOpString.Add)
     elif op == 'Mod':
         return(BinOpString.Mod)
+    else:
+        pass
+
+def getUnaryOpStr(op): #add more if needed
+    if op == 'UAdd':
+        return(UnaryOpString.UAdd)
+    elif op == 'USub':
+        return(UnaryOpString.USub)
+    elif op == 'Invert':
+        return(UnaryOpString.Invert)
+    elif op == 'Not':
+        return(UnaryOpString.Not)
     else:
         pass
 
@@ -59,57 +133,121 @@ def getComparatoropStr(op): #add more if needed
         pass
    
 class Node():
+    def print_node(self):
+        pass
     def visit(self):
         pass
     def parse(self):
         pass
 
-class Leveled_Node():
-    pass
+class Tuple(Node):
+    def __init__(self, elts, ctx):
+        self.elts = Sequence(elts)
+        self.elts.parse()
+        self.ctx = getContext(ctx) # Load / Store
+        self.level = DEFAULT_LEVEL
 
+    def print_node(self):
+        return ("({})".format(self.elts.print_node()))
 
-class Comparator(Node):
-    def __init__(self, node):
-        self.ops = getComparatoropStr(node['ops'][0]['ast_type']) #FIXME : hardcoded the index ... maybe sequence node?
-        self.comparators = retNode(node['comparators'][0])
-        self.left = Name(node['left']) #FIXME: only name???
-    
     def visit(self):
-        return("{}{}{}".format(self.left.visit(),self.ops.value, self.comparators.visit())) 
-            
+        pass
+    def parse(self):
+        pass
 
+class Compare(Node):
+    def __init__(self, left, ops, comparators):
+        self.left = RightValue(left)
+        self.ops = [ getBoolopStr(op['ast_type']) for op in ops ]
+        self.comparators = Sequence(comparators)
+        self.comparators.parse()
+
+    def print_node(self):
+        comparators = self.comparators.print_node().split(",")
+
+        return "{} {}".format(self.left.print_node(), " ".join([op.value + " " + comp.strip() for op, comp in zip(self.ops, comparators)]))
+
+    def visit(self):
+        pass
+    def parse(self):
+        pass
+
+class IfExp(Node):
+    def __init__(self, body, orelse, test):
+        self.body = RightValue(body)
+        self.body.parse()
+
+        self.orelse = RightValue(orelse)
+        self.orelse.parse()
+
+        self.test = retNode(test) #FIXME: can be more than a compare node!
+    
+    def print_node(self):
+
+        return("{} if {} else: {}".format(self.body.print_node(), self.test.print_node(), self.orelse.print_node()))    
+
+    def visit(self):
+        pass
     def parse(self):
         #TODO: parse the test
         pass
 
 
 class If(Node):
-    def __init__(self, node):
-        self.body = Sequence(node['body'])
+    def __init__(self, body, orelse, test):
+        self.body = Sequence(body)
         self.body.parse()
 
-        self.orelse = Sequence(node['orelse'])
+        self.orelse = Sequence(orelse)
         self.orelse.parse()
 
-        self.test = Comparator(node['test']) #FIXME: can be more than a compare node!
+        self.test = retNode(test) #FIXME: can be more than a compare node!
     
+    def print_node(self):
+
+        return("if {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
+
     def visit(self):
-
-        return("if {}: {} else:{}".format(self.test.visit(),self.body.visit(), self.orelse.visit()))    
-
+        pass
     def parse(self):
         #TODO: parse the test
         pass
 
+class While(Node):
+    def __init__(self, body, orelse, test):
+        self.body = Sequence(body)
+        self.body.parse()
+
+        self.orelse = Sequence(orelse)
+        self.orelse.parse()
+
+        self.test = retNode(test) #FIXME: can be more than a compare node!
+    
+    def print_node(self):
+
+        return("while {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
+
+    def visit(self):
+        pass
+    def parse(self):
+        #TODO: parse the test
+        pass
 
 class Call(Node):
-    def __init__(self, node):
-        self.args = Sequence(node['args'])
+    def __init__(self, func, args):
+        self.args = Sequence(args)
         self.args.parse()
-        self.func = Name(node['func'])
+        self.func = Name(func['id'], func['ctx'])
+        self.level = DEFAULT_LEVEL
     
+    def print_node(self):
+        return("(level:{}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
+
     def visit(self):
-        return("{}({})".format(self.func.visit(),self.args.visit()))    
+        self.args.visit()
+        for arg in self.args:
+            if arg.level == Level.Tainted:
+                self.level = Level.Tainted
 
     def parse(self):
         #Nothing to do here
@@ -117,90 +255,133 @@ class Call(Node):
 
 class Name(Node):
     #FIXME: needs a level 
-    def __init__(self, node):
-        self.id = node['id']
-        self.type = node['ctx']['ast_type'] # Load / Store
+    def __init__(self, idd, ctx):
+        self.id = idd
+        self.type = getContext(ctx) # Load / Store
+        self.level = self.level = DEFAULT_LEVEL
+        # TODO: Optimize!
+        
+
+    def print_node(self):
+        # return("{} (level: {})".format(self.id, self.level)) 
+        return("{}".format(self.id)) 
 
     def visit(self):
-        return(self.id)
+        if self.type == "Load" and self.id not in SYMTAB:
+            # set level to tainted
+            self.level = Level.Tainted
 
+        if self.id not in SYMTAB:
+            SYMTAB[self.id] = self
+        
+    
     def parse(self):
         #TODO: what to do here ? 
         pass
 
 class Str(Node):
     #FIXME: needs a level 
-    def __init__(self, node):
-        self.value = node['s']
+    def __init__(self, s):
+        self.value = s
+        self.level = DEFAULT_LEVEL
+
+    def print_node(self):
+        return("\"{}\"".format(self.value))  
 
     def visit(self):
-        return("{}".format(self.value))  
-
+        pass
     def parse(self):
         #TODO: what to do here ?
         pass
 
 class Num(Node):
     #FIXME: needs a level 
-    def __init__(self, node):
-        self.node = int(node['n'])
+    def __init__(self, n):
+        self.node = int(n['n'], n['n_str'])
+        self.level = DEFAULT_LEVEL
+
+    def print_node(self):
+        return(self.node.print_node())
 
     def visit(self):
-        return(self.node.visit())
-
+        pass
     def parse(self):
         #TODO: what to do here ? 
         pass
         
 class int(Node):
     #FIXME: needs a level 
-    def __init__(self, node):
-        self.n = node['n']
-        self.n_str = node['n_str']
+    def __init__(self, n, n_str):
+        self.n = n
+        self.n_str = n_str
 
-    def visit(self):
+    def print_node(self):
         return(self.n_str)
 
+    def visit(self):
+        pass
     def parse(self):
         #TODO: what to do here ? 
         pass
 
-class Str(Node):
-    #FIXME: needs a level 
-    def __init__(self, node):
-        self.value = node['s']
-
-    def visit(self):
-        return(self.value)
-
-    def parse(self):
-        #TODO: what to do here ?
-        pass
 
 class RightValue(Node):
     #FIXME: needs a level 
     def __init__(self, node):
-        self.node = node
+        self.level = DEFAULT_LEVEL
+        self.node = retNode(node)
+        self.node.parse()
     
+    def print_node(self):
+        return(self.node.print_node())
+
     def visit(self):
-        return(self.node.visit())
+        self.node.visit()
+        self.level = self.node.level
 
     def parse(self):
-        self.node = retNode(self.node)
-        self.node.parse()
+        pass
 
 class Assign(Node):
+    #TODO : FINISH 
     #FIXME: python can have multiple values (i.e a,b = 2,3)
     def __init__(self, targets, value):
         self.targets = RightValue(targets[0]) 
+        # self.value = RightValue(value)
         self.value = RightValue(value)
+        self.level = DEFAULT_LEVEL
     
+    def print_node(self):
+        self.visit()
+        return("(level: {}) {}={}".format(self.level, self.targets.print_node(),self.value.print_node()))    
+
     def visit(self):
-        return("{}={}".format(self.targets.visit(),self.value.visit()))    
+        if isinstance(self.targets.node, Tuple):
+            pass # logo se ve
+        else:
+            self.value.visit()
+            self.targets.visit()
+            self.level = self.value.level 
+            SYMTAB[self.targets.node.id].level = self.level 
 
     def parse(self):
         self.value.parse()
         self.targets.parse()
+
+
+class UnaryOp(Node):
+    def __init__(self, op, operand):
+        self.op = getUnaryOpStr(op)
+        self.operand = RightValue(operand)
+    
+    def print_node(self):
+        return "{} {}".format(self.op.value, self.operand.print_node())
+
+    def visit(self):
+        pass
+
+    def parse(self):
+        pass
 
 
 class BinOp(Node):
@@ -210,9 +391,27 @@ class BinOp(Node):
         self.op = getBinopStr(op)
         
     
-    def visit(self):
-        return("{}{}{} ".format(self.left.visit(),self.op.value,self.right.visit()))
+    def print_node(self):
+        return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
 
+    def visit(self):
+        pass
+    def parse(self):
+        self.left.parse()      
+        self.right.parse()
+
+class BoolOp(Node):
+    def __init__(self, left, right, op):
+        self.left = RightValue(left)
+        self.right = RightValue(right)
+        self.op = getBoolopStr(op)
+        
+    
+    def print_node(self):
+        return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
+
+    def visit(self):
+        pass
     def parse(self):
         self.left.parse()      
         self.right.parse()
@@ -222,25 +421,31 @@ class Sequence(Node):
         self.nodes = nodes
         self.parsed_nodes = []  
 
-    def visit(self):
+    def print_node(self):
         st =[]
         for n in self.parsed_nodes:
-            st.append(n.visit())
+            st.append(n.print_node())
         return(", ".join(st))
 
+    def visit(self):
+        pass
     def parse(self):
+        i = 0
         for n in self.nodes:
+            # print("{} : {}".format(i, n))
+            # i += 1
             node = retNode(n)
-            node.parse()
             self.parsed_nodes.append(node)  
 
 class Body(Node):
     def __init__(self, nodes):
         self.nodes = Sequence(nodes) 
 
-    def visit(self):
-        return(self.nodes.visit())
+    def print_node(self):
+        return(self.nodes.print_node())
 
+    def visit(self):
+        pass
     def parse(self):
         self.nodes.parse()
 
@@ -248,9 +453,11 @@ class Module(Node):
     def __init__(self, ast):
         self.body = Body(ast['body'])
     
-    def visit(self):
-        return(self.body.visit())
+    def print_node(self):
+        return(self.body.print_node())
     
+    def visit(self):
+        pass
     def parse(self):
         self.body.parse()
 
@@ -259,129 +466,21 @@ def parse(ast):
         node = Module(ast['body'])
         node.parse()
 
-def Main():
+
+def Main(filename):
     ast = {}
-    with open("proj-slices/slice7.json", "r") as f:
+    with open(filename, "r") as f:
+    # with open(filename, "r") as f:
         ast = json.loads(f.read())
     
     module = Module(ast)
     module.parse()
-    
-    print(module.visit())
+    print(module.print_node())
+
+parser = argparse.ArgumentParser(prog='parse', description="to be continued", 
+            usage="python parse slice.json")
+parser.add_argument('filename', type=str)
 
 if __name__ == '__main__':
-    Main()
-
-# def stmt(Node):
-#     return assign_stmt() | \
-#            if_stmt()     | \
-#            while_stmt()
-
-# def assign_stmt():
-#     def process(parsed):
-#         ((name, _), exp) = parsed
-#         return AssignStatement(name, exp)
-#     return id + keyword(':=') + aexp() ^ process
-
-# def if_stmt():
-#     def process(parsed):
-#         (((((_, condition), _), true_stmt), false_parsed), _) = parsed
-#         if false_parsed:
-#             (_, false_stmt) = false_parsed
-#         else:
-#             false_stmt = None
-#         return IfStatement(condition, true_stmt, false_stmt)
-#     return keyword('if') + bexp() + \
-#            keyword('then') + Lazy(stmt_list) + \
-#            Opt(keyword('else') + Lazy(stmt_list)) + \
-#            keyword('end') ^ process
-
-# def while_stmt():
-#     def process(parsed):
-#         ((((_, condition), _), body), _) = parsed
-#         return WhileStatement(condition, body)
-#     return keyword('while') + bexp() + \
-#            keyword('do') + Lazy(stmt_list) + \
-#            keyword('end') ^ process
-
-# # Boolean expressions
-# def bexp():
-#     return precedence(bexp_term(),
-#                       bexp_precedence_levels,
-#                       process_logic)
-
-# def bexp_term():
-#     return bexp_not()   | \
-#            bexp_relop() | \
-#            bexp_group()
-
-# def bexp_not():
-#     return keyword('not') + Lazy(bexp_term) ^ (lambda parsed: NotBexp(parsed[1]))
-
-# def bexp_relop():
-#     relops = ['<', '<=', '>', '>=', '=', '!=']
-#     return aexp() + any_operator_in_list(relops) + aexp() ^ process_relop
-
-# def bexp_group():
-#     return keyword('(') + Lazy(bexp) + keyword(')') ^ process_group
-
-# # Arithmetic expressions
-# def aexp():
-#     return precedence(aexp_term(),
-#                       aexp_precedence_levels,
-#                       process_binop)
-
-# def aexp_term():
-#     return aexp_value() | aexp_group()
-
-# def aexp_group():
-#     return keyword('(') + Lazy(aexp) + keyword(')') ^ process_group
-           
-# def aexp_value():
-#     return (num ^ (lambda i: IntAexp(i))) | \
-#            (id  ^ (lambda v: VarAexp(v)))
-
-# # An IMP-specific combinator for binary operator expressions (aexp and bexp)
-# def precedence(value_parser, precedence_levels, combine):
-#     def op_parser(precedence_level):
-#         return any_operator_in_list(precedence_level) ^ combine
-#     parser = value_parser * op_parser(precedence_levels[0])
-#     for precedence_level in precedence_levels[1:]:
-#         parser = parser * op_parser(precedence_level)
-#     return parser
-
-# # Miscellaneous functions for binary and relational operators
-# def process_binop(op):
-#     return lambda l, r: BinopAexp(op, l, r)
-
-# def process_relop(parsed):
-#     ((left, op), right) = parsed
-#     return RelopBexp(op, left, right)
-
-# def process_logic(op):
-#     if op == 'and':
-#         return lambda l, r: AndBexp(l, r)
-#     elif op == 'or':
-#         return lambda l, r: OrBexp(l, r)
-#     else:
-#         raise RuntimeError('unknown logic operator: ' + op)
-
-# def process_group(parsed):
-#     ((_, p), _) = parsed
-#     return p
-
-# def any_operator_in_list(ops):
-#     op_parsers = [keyword(op) for op in ops]
-#     parser = reduce(lambda l, r: l | r, op_parsers)
-#     return parser
-
-# # Operator keywords and precedence levels
-# aexp_precedence_levels = [
-#     ['*', '/'],
-#     ['+', '-'],
-# ]
-
-# bexp_precedence_levels = [
-#     ['and'],
-#     ['or'],
-# ]
+    args = parser.parse_args()
+    Main(args.filename)
