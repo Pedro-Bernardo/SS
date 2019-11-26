@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-import json
-import enum
-import argparse
+import json, enum, argparse, copy
 
 class Level(enum.Enum):
     Tainted = True
@@ -12,6 +10,7 @@ IN_CALL = False
 PATHS = []
 DEFAULT_LEVEL = Level.Untainted
 CONFIG = []
+VULNERABILITY = {}
 
 STACK = []
 SOURCES = []
@@ -86,25 +85,13 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
     return node
 
 def is_source(name):
-    for vuln in CONFIG:
-        if name in vuln['sources']:
-            return True
-    
-    return False
+    return name in VULNERABILITY['sources']
 
 def is_sanitizer(name):
-    for vuln in CONFIG:
-        if name in vuln['sanitizers']:
-            return True
-    
-    return False
+    return name in VULNERABILITY['sanitizers']
 
 def is_sink(name):
-    for vuln in CONFIG:
-        if name in vuln['sinks']:
-            return True
-    
-    return False
+    return name in VULNERABILITY['sinks']
 
 def getContext(ctx):
     return ctx['ast_type']
@@ -161,8 +148,6 @@ class Node():
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
     
     def taint(self):
         pass
@@ -181,8 +166,8 @@ class Node():
 #     def print_node(self):
 #         return "{}.{}".format(self.value.print_node(), self.attr)
 
-#     def visit(self):
-#         name = self.value.visit()
+#     def taint(self):
+#         # get the name
 #         if not name:
 #             name = self.value.id
 
@@ -191,6 +176,7 @@ class Node():
 
 #         self.name = "{}.{}".format(name, self.attr)
 #         return self.name
+
 #     def parse(self):
 #         pass
 
@@ -207,11 +193,8 @@ class Attribute(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
-
     def taint(self):
-        self.value.visit()
+        self.value.taint()
         self.level = self.value.level
 
     def parse(self):
@@ -229,8 +212,6 @@ class NameConstant(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
 
     
     def taint(self):
@@ -251,8 +232,6 @@ class Tuple(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
     
     def taint(self):
         self.elts.taint()
@@ -279,8 +258,6 @@ class Compare(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
 
     def taint(self):
         self.left.taint()
@@ -302,6 +279,7 @@ class IfExp(Node):
         self.body = RightValue(body)
         self.orelse = RightValue(orelse)
         self.test = retNode(test) #FIXME: can be more than a compare node!
+        self.level = DEFAULT_LEVEL
     
     def print_node(self):
         return("{} if {} else: {}".format(self.body.print_node(), self.test.print_node(), self.orelse.print_node()))    
@@ -318,8 +296,6 @@ class IfExp(Node):
 
         G.append([L, R])
 
-    def visit(self):
-        pass
     
     def taint(self):
         global STACK
@@ -353,8 +329,6 @@ class If(Node):
         G.append([L, R])
 
 
-    def visit(self):
-        pass
 
     
     def taint(self):
@@ -387,8 +361,6 @@ class While(Node):
 
         G.append([L, R])
 
-    def visit(self):
-        pass
 
     def taint(self):
         global STACK
@@ -408,7 +380,6 @@ class Call(Node):
         IN_CALL = False
         self.lineno = lineno
         self.level = DEFAULT_LEVEL
-        print("Constructor", self.level)
     
     def print_node(self):
         # return("({}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
@@ -417,21 +388,19 @@ class Call(Node):
     def path_visit(self, G):
         G.append(self)
 
-    def visit(self):
-        pass
     
     def taint(self):
-        # if source -> tainted
-        print("Before", self.level)
+        global SANITIZERS
+        global SINKS
+        
         self.func.taint()
-        print("After", self.level)
         self.args.taint()
+
         name = self.func.id if isinstance(self.func, Name) else self.func.attr
 
         if is_source(name):
             self.level = Level.Tainted
-            return 
-        
+            return {'type': "SOURCE", 'lineno': self.lineno, 'func': name }
 
         # true if not sanitizer
         if is_sanitizer(name):
@@ -439,11 +408,16 @@ class Call(Node):
             for arg in self.args.nodes:
                 if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
                     SYMTAB[arg.id].level = Level.Untainted
-                    print("{} sanitized {} at line {}".format(name, arg.id, self.lineno))
+                    SANITIZERS.append({'func': name, 'var':arg.id, 'lineno':self.lineno})
         
+        elif is_sink(name):
+            for arg in self.args.nodes:
+                if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
+                    self.level = Level.Tainted
+                    SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno})
+
         else:
             for arg in self.args.nodes:
-                print(self.level)
                 if arg.level == Level.Tainted:
                     self.level = Level.Tainted
                     break
@@ -471,13 +445,10 @@ class Name(Node):
         # return("{} (level: {})".format(self.id, self.level)) 
         pass
 
-    def visit(self):
-        pass
 
     
     def taint(self):
         if self.in_call:
-            print("HERE")
             return
         
         if self.type == "Load" and self.id not in SYMTAB:
@@ -508,8 +479,6 @@ class Str(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self): # Nothing to do since it will always be untainted
-        pass
 
     
     def taint(self):
@@ -531,8 +500,6 @@ class Num(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self): # Nothing to do since it will always be untainted
-        pass
 
     
     def taint(self):
@@ -554,8 +521,6 @@ class int(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
 
     
     def taint(self):
@@ -578,12 +543,11 @@ class RightValue(Node):
     def path_visit(self, G):
         return(self.node.path_visit(G))
 
-    def visit(self):
-        pass
 
     def taint(self):
-        self.node.taint()
+        ret = self.node.taint()
         self.level = self.node.level
+        return ret
 
     def parse(self):
         self.node.parse()
@@ -604,17 +568,18 @@ class Assign(Node):
     def path_visit(self, G):
         G.append(self)
 
-    def visit(self):
-        pass
     
     def taint(self):
-        self.targets.taint()
-        print("CALLING")
-        print("BEFORE ON CALL", self.value.level)
-        self.value.taint()
-        print("AFTER ON CALL", self.value.level)
+        global SOURCES
+        global SANITIZERS
+        global SINKS
 
-        print(self.value.node)
+        self.targets.taint()
+        ret = self.value.taint()
+        if ret != None:
+            if ret['type'] == "SOURCE":
+                SOURCES.append({'var': self.targets.node.id, 'lineno': ret['lineno'], 'func': ret['func']})
+
         self.level = self.value.level 
 
         if Level.Tainted in STACK:
@@ -641,11 +606,8 @@ class UnaryOp(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
-    
     def taint(self):
-        self.operand.visit()
+        self.operand.taint()
         self.level = self.operand.level() #just updates if the operand level changes
 
     def parse(self):
@@ -665,8 +627,6 @@ class BinOp(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        pass
     
     def taint(self):
         self.left.taint()
@@ -691,15 +651,10 @@ class BoolOp(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        self.left.visit()
-        self.right.visit()
+    def taint(self):
+        self.right.taint()
         if self.left.level == Level.Tainted or self.right.level == Level.Tainted:
             self.level = Level.Tainted
-
-    
-    def taint(self):
-        pass
 
     def parse(self):
         self.left.parse()      
@@ -722,8 +677,6 @@ class Sequence(Node):
         for n in self.nodes:
             n.path_visit(G)
             
-    def visit(self):
-        pass
     
     def taint(self):
         for n in self.nodes:
@@ -742,8 +695,6 @@ class Body(Node):
     def print_node(self):
         return(self.nodes.print_node())
 
-    def visit(self):
-        self.nodes.visit()
         
     def path_visit(self, G):
         return(self.nodes.path_visit(G))
@@ -765,8 +716,6 @@ class Module(Node):
     def path_visit(self, G):
         pass
 
-    def visit(self):
-        self.body.visit()
 
     def path_visit(self):
         G = []
@@ -793,10 +742,11 @@ def dfs(graph, visited, paths):
 
     if isinstance(graph[0], list):
         dfs(graph[0][0] + ["POP"] + graph[1:], visited, paths)
-        dfs(graph[0][1] + ["POP"]  + graph[1:], visited, paths)
+        dfs(graph[0][1] + ["POP"] + graph[1:], visited, paths)
     
     else:
-        return dfs(graph[1:], visited + [graph[0]], paths)
+        # use a deepcopy to make every path independant of eachother
+        return dfs(graph[1:], visited + [copy.deepcopy(graph[0])], paths)
 
 
 def Main(filename, config_file):
@@ -806,6 +756,7 @@ def Main(filename, config_file):
     global SOURCES
     global SANITIZERS
     global SINKS
+    global VULNERABILITY
     ast = {}
 
     with open(config_file, "r") as f:
@@ -815,41 +766,59 @@ def Main(filename, config_file):
         ast = json.loads(f.read())
     
     module = Module(ast)
+    # build objects
     module.parse()
-    module.visit()
+
+    # build the call graph
     G = module.path_visit()
-    # print(module.print_node())
 
-    print("=======================================")
     dfs(G, [], PATHS)
-    # print(G)
-    for a in PATHS:
-        print("{} steps - {}".format(len(a), a))
-
     
-    for path in PATHS:
-        for node in path:
-            if node == "POP":
-                STACK = STACK[1:]
-                print("POP", STACK)
-            else:
-                node.taint()
-        
-        print("========================================")
-        for s in SYMTAB:
-            print("{} : {}".format(SYMTAB[s].id, SYMTAB[s].level))
+    # for a in PATHS:
+    #     print("{} steps - {}".format(len(a), a))
 
-        SYMTAB = {}
-        STACK = []
-        SOURCES = []
-        SANITIZERS = []
-        SINKS = []
+    # search one vulnerability at a time
+    for vuln in CONFIG:
+        VULNERABILITY = vuln
+        for path in PATHS:
+            for node in path:
+                if node == "POP":
+                    STACK = STACK[1:]
+                else:
+                    node.taint()
+            
+            # print("============ SYMTAB ===============")
+            # for s in SYMTAB:
+            #     print("{} : {}".format(SYMTAB[s].id, SYMTAB[s].level))
+            # print("===================================")
+
+            # TODO: Maybe log porpagations?
+            # TODO: No sinks but sanitizers
+            # TODO: No sources but sinks (undeclared variables)
+            # TODO: Move RightValue to retNode
+            if len(SINKS) > 0:
+                print("Vulnerability : {}\nStatus: vulnerable".format(vuln['vulnerability']))
+                for source in SOURCES:
+                    print("================================================")
+                    if len(SANITIZERS) > 0:
+                        for sanitizer in SANITIZERS:
+                            for sink in SINKS:
+                                print("line {}: (SOURCE) variable '{}' tainted by call to '{}'".format(source['lineno'], source['var'], source['func']))
+                                print("line {}: (SANITIZER) varialbe '{}' sanitized by call to '{}'".format(sanitizer['lineno'], sanitizer['var'], sanitizer['func']))
+                                print("line {}: (SINK) call to '{}' with tainted variable '{}'".format(sink['lineno'], sink['func'], sink['var']))
+                    else:
+                        for sink in SINKS:
+                            print("line {}: (SOURCE) variable '{}' tainted by call to '{}'".format(source['lineno'], source['var'], source['func']))
+                            print("line {}: (SINK) call to '{}' with tainted variable '{}'".format(sink['lineno'], sink['func'], sink['var']))
 
 
-    # print(module.print_node())
-    # print("=========== final symtab ==============")
-    # for v in SYMTAB:
-    #     print("{}: {}".format(v, SYMTAB[v].level))
+            # clear state for next iteration
+            SYMTAB = {}
+            STACK = []
+            SOURCES = []
+            SANITIZERS = []
+            SINKS = []
+
 
 parser = argparse.ArgumentParser(prog='parse', description="to be continued", 
             usage="python parse slice.json < --config config.json >")
