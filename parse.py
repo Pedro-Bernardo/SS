@@ -8,8 +8,15 @@ class Level(enum.Enum):
     Untainted = False
 
 SYMTAB = {}
+IN_CALL = False
+PATHS = []
 DEFAULT_LEVEL = Level.Untainted
-CONFIG = ""
+CONFIG = []
+
+STACK = []
+SOURCES = []
+SANITIZERS = []
+SINKS = []
 
 class BinOpString(enum.Enum):
     Add = '+'
@@ -52,11 +59,11 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
     elif node['ast_type'] == "UnaryOp":
         node = UnaryOp(node['op']['ast_type'], node['operand'])
     elif node['ast_type'] == "Name":
-        node = Name(node['id'], node['ctx'])
+        node = Name(node['id'], node['ctx'], node['lineno'])
     elif node['ast_type'] == "Str":
         node = Str(node['s'])
     elif node['ast_type'] == "Call":
-        node = Call(node['func'],node['args'])
+        node = Call(node['func'],node['args'], node['lineno'])
     elif node['ast_type'] == "Num":
         node = Num(node['n'])
     elif node['ast_type'] == "If" :
@@ -77,6 +84,27 @@ def retNode(node): #TODO: Refactor this, no need to give the entire node as an a
         pass
 
     return node
+
+def is_source(name):
+    for vuln in CONFIG:
+        if name in vuln['sources']:
+            return True
+    
+    return False
+
+def is_sanitizer(name):
+    for vuln in CONFIG:
+        if name in vuln['sanitizers']:
+            return True
+    
+    return False
+
+def is_sink(name):
+    for vuln in CONFIG:
+        if name in vuln['sinks']:
+            return True
+    
+    return False
 
 def getContext(ctx):
     return ctx['ast_type']
@@ -130,10 +158,41 @@ def getUnaryOpStr(op): #add more if needed
 class Node():
     def print_node(self):
         pass
+    def path_visit(self, G):
+        pass
+
     def visit(self):
         pass
+    
+    def taint(self):
+        pass
+
     def parse(self):
         pass
+
+# class Attribute(Node):
+#     def __init__(self, value, attr, ctx):
+#         self.value = retNode(value)
+#         self.attr = attr
+#         self.ctx = getContext(ctx)
+#         self.level = DEFAULT_LEVEL
+#         self.name = ""
+
+#     def print_node(self):
+#         return "{}.{}".format(self.value.print_node(), self.attr)
+
+#     def visit(self):
+#         name = self.value.visit()
+#         if not name:
+#             name = self.value.id
+
+#         if self.value.level == Level.Tainted:
+#             self.level = Level.Tainted
+
+#         self.name = "{}.{}".format(name, self.attr)
+#         return self.name
+#     def parse(self):
+#         pass
 
 class Attribute(Node):
     def __init__(self, value, attr, ctx):
@@ -145,13 +204,19 @@ class Attribute(Node):
     def print_node(self):
         return "{}.{}".format(self.value.print_node(), self.attr)
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
+        pass
+
+    def taint(self):
         self.value.visit()
-        if self.value.level == Level.Tainted:
-            self.level = Level.Tainted
+        self.level = self.value.level
 
     def parse(self):
         pass
+
 
 class NameConstant(Node):
     def __init__(self, value):
@@ -161,8 +226,15 @@ class NameConstant(Node):
     def print_node(self):
         return self.value
     
+    def path_visit(self, G):
+        pass
+
     def visit(self):
-        self.value.visit()
+        pass
+
+    
+    def taint(self):
+        pass
 
     def parse(self):
         pass
@@ -176,8 +248,19 @@ class Tuple(Node):
     def print_node(self):
         return ("({})".format(self.elts.print_node()))
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
         pass
+    
+    def taint(self):
+        self.elts.taint()
+        for el in self.elts.nodes:
+            if el.level == Level.Tainted:
+                self.level = Level.Tainted
+                return
+        
 
     def parse(self):
         self.elts.parse()
@@ -193,9 +276,23 @@ class Compare(Node):
         comparators = self.comparators.print_node().split(",")
         return "{} {}".format(self.left.print_node(), " ".join([op.value + " " + comp.strip() for op, comp in zip(self.ops, comparators)]))
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
-        if self.left.level == Level.Tainted or self.comparators.level == Level.Tainted:
+        pass
+
+    def taint(self):
+        self.left.taint()
+        self.comparators.taint()
+        if self.left.level == Level.Tainted:
             self.level = Level.Tainted
+            return
+
+        for c in self.comparators.nodes:
+            if c.level == Level.Tainted:
+                self.level = Level.Tainted
+                return
 
     def parse(self):
         self.comparators.parse()
@@ -207,15 +304,27 @@ class IfExp(Node):
         self.test = retNode(test) #FIXME: can be more than a compare node!
     
     def print_node(self):
-
         return("{} if {} else: {}".format(self.body.print_node(), self.test.print_node(), self.orelse.print_node()))    
+        
+
+    def path_visit(self, G):
+        L = []
+        R = []
+        self.body.path_visit(L) 
+        self.orelse.path_visit(R)
+        # insert test
+        L.insert(0, self)
+        R.insert(0, self)
+
+        G.append([L, R])
 
     def visit(self):
-        self.test.visit()
-        #TODO:maybe set the level of the guard in a global queue so that when visiting the body we know the context?
-        self.body.visit()
-        self.orelse.visit()
-        #TODO:pop it from the queue so that we get out of the scope
+        pass
+    
+    def taint(self):
+        global STACK
+        self.test.taint()
+        STACK.insert(0, self.test.level)
 
     def parse(self):
         #TODO: parse the test
@@ -232,12 +341,26 @@ class If(Node):
     def print_node(self):
         return("if {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
 
+    def path_visit(self, G):
+        L = []
+        R = []
+        self.body.path_visit(L) 
+        self.orelse.path_visit(R)
+        # insert test
+        L.insert(0, self)
+        R.insert(0, self)
+
+        G.append([L, R])
+
+
     def visit(self):
-        self.test.visit()
-        #TODO:maybe set the level of the guard in a global queue so that when visiting the body we know the context?
-        self.body.visit()
-        self.orelse.visit()
-        #TODO:pop it from the queue so that we get out of the scope
+        pass
+
+    
+    def taint(self):
+        global STACK
+        self.test.taint()
+        STACK.insert(0, self.test.level)
 
     def parse(self):
         #TODO: parse the test
@@ -253,34 +376,77 @@ class While(Node):
     def print_node(self):
         return("while {}: {} else:{}".format(self.test.print_node(),self.body.print_node(), self.orelse.print_node()))    
 
-    def visit(self):
-        self.test.visit()
-        #TODO:maybe set the level of the guard in a global queue so that when visiting the body we know the context?
+    def path_visit(self, G):
+        L = []
+        R = []
+        self.body.path_visit(L) 
+        self.orelse.path_visit(R)
+        # insert test
+        L.insert(0, self)
+        R.insert(0, self)
 
-        self.body.visit()
-        self.orelse.visit()
-        #TODO:pop it from the queue so that we get out of the scope
+        G.append([L, R])
+
+    def visit(self):
+        pass
+
+    def taint(self):
+        global STACK
+        self.test.taint()
+        STACK.insert(0, self.test.level)
 
     def parse(self):
         self.body.parse()
         self.orelse.parse()
 
 class Call(Node):
-    def __init__(self, func, args):
+    def __init__(self, func, args, lineno):
+        global IN_CALL
         self.args = Sequence(args)
+        IN_CALL = True
         self.func = retNode(func)   # Name(func['id'], func['ctx'])
+        IN_CALL = False
+        self.lineno = lineno
         self.level = DEFAULT_LEVEL
+        print("Constructor", self.level)
     
     def print_node(self):
-        return("({}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
-        # return("{}({})".format(self.func.print_node(),self.args.print_node()))    
+        # return("({}) {}({})".format(self.level, self.func.print_node(),self.args.print_node()))    
+        return("{}({})".format(self.func.print_node(),self.args.print_node()))    
+
+    def path_visit(self, G):
+        G.append(self)
 
     def visit(self):
-        self.args.visit()
-        for arg in self.args.nodes:
-            if arg.level == Level.Tainted:
-                self.level = Level.Tainted
-                break
+        pass
+    
+    def taint(self):
+        # if source -> tainted
+        print("Before", self.level)
+        self.func.taint()
+        print("After", self.level)
+        self.args.taint()
+        name = self.func.id if isinstance(self.func, Name) else self.func.attr
+
+        if is_source(name):
+            self.level = Level.Tainted
+            return 
+        
+
+        # true if not sanitizer
+        if is_sanitizer(name):
+            # check and sanitize tainted args
+            for arg in self.args.nodes:
+                if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
+                    SYMTAB[arg.id].level = Level.Untainted
+                    print("{} sanitized {} at line {}".format(name, arg.id, self.lineno))
+        
+        else:
+            for arg in self.args.nodes:
+                print(self.level)
+                if arg.level == Level.Tainted:
+                    self.level = Level.Tainted
+                    break
 
     def parse(self):
         #Nothing to do here
@@ -289,18 +455,31 @@ class Call(Node):
 
 class Name(Node):
     #FIXME: needs a level 
-    def __init__(self, idd, ctx):
+    def __init__(self, idd, ctx, lineno):
         self.id = idd
         self.type = getContext(ctx) # Load / Store
         self.level = self.level = DEFAULT_LEVEL
+        self.lineno = lineno
+        self.in_call = IN_CALL
         # TODO: Optimize!
-        
 
     def print_node(self):
+        return("{}".format(self.id)) 
+        # return("({}) {}".format(self.level, self.id)) 
+
+    def path_visit(self, G):
         # return("{} (level: {})".format(self.id, self.level)) 
-        return("({}) {}".format(self.level, self.id)) 
+        pass
 
     def visit(self):
+        pass
+
+    
+    def taint(self):
+        if self.in_call:
+            print("HERE")
+            return
+        
         if self.type == "Load" and self.id not in SYMTAB:
             # set level to tainted
             self.level = Level.Tainted
@@ -309,6 +488,9 @@ class Name(Node):
             SYMTAB[self.id] = self
         
         self.level = SYMTAB[self.id].level
+        
+
+        # print("({}) {}".format(self.level, self.id))
 
     def parse(self):
         #TODO: what to do here ? 
@@ -323,7 +505,14 @@ class Str(Node):
     def print_node(self):
         return("\"{}\"".format(self.value))  
 
+    def path_visit(self, G):
+        pass
+
     def visit(self): # Nothing to do since it will always be untainted
+        pass
+
+    
+    def taint(self):
         pass
 
     def parse(self):
@@ -339,7 +528,14 @@ class Num(Node):
     def print_node(self):
         return(self.node.print_node())
 
+    def path_visit(self, G):
+        pass
+
     def visit(self): # Nothing to do since it will always be untainted
+        pass
+
+    
+    def taint(self):
         pass
 
     def parse(self):
@@ -355,7 +551,14 @@ class int(Node):
     def print_node(self):
         return(self.n_str)
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
+        pass
+
+    
+    def taint(self):
         pass
 
     def parse(self):
@@ -372,8 +575,14 @@ class RightValue(Node):
     def print_node(self):
         return(self.node.print_node())
 
+    def path_visit(self, G):
+        return(self.node.path_visit(G))
+
     def visit(self):
-        self.node.visit()
+        pass
+
+    def taint(self):
+        self.node.taint()
         self.level = self.node.level
 
     def parse(self):
@@ -389,30 +598,31 @@ class Assign(Node):
         self.level = DEFAULT_LEVEL
     
     def print_node(self):
-        # self.visit()
         # return("(level: {}) {}={}".format(self.level, self.targets.print_node(),self.value.print_node()))    
         return("{}={}".format(self.targets.print_node(),self.value.print_node()))    
 
-    def visit(self):
-        self.targets.visit()
-        self.value.visit()
-        if isinstance(self.targets.node, Tuple):
-            '''
-                Simple version:
-                    if(self.value.node.level == Level.Tainted):
-                        self.level = Level.Tainted
+    def path_visit(self, G):
+        G.append(self)
 
-                Weird Stuff:
-                means we are inside the case a,b = 2,3 where a=2 and b=3
-                for target,value in zip(self.targets.node.elts.parsed_nodes.visit(), self.value.node.elts.parsed_nodes.visit()):
-                    
-            '''
-            pass # logo se ve
-        else:
-            self.value.visit()
-            self.targets.visit()
-            self.level = self.value.level 
-            SYMTAB[self.targets.node.id].level = self.level 
+    def visit(self):
+        pass
+    
+    def taint(self):
+        self.targets.taint()
+        print("CALLING")
+        print("BEFORE ON CALL", self.value.level)
+        self.value.taint()
+        print("AFTER ON CALL", self.value.level)
+
+        print(self.value.node)
+        self.level = self.value.level 
+
+        if Level.Tainted in STACK:
+            self.level = Level.Tainted
+            self.targets.level = Level.Tainted
+
+        SYMTAB[self.targets.node.id].level = self.level 
+        
 
     def parse(self):
         self.value.parse()
@@ -428,7 +638,13 @@ class UnaryOp(Node):
     def print_node(self):
         return "{} {}".format(self.op.value, self.operand.print_node())
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
+        pass
+    
+    def taint(self):
         self.operand.visit()
         self.level = self.operand.level() #just updates if the operand level changes
 
@@ -446,12 +662,18 @@ class BinOp(Node):
     def print_node(self):
         return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
-        self.left.visit()
-        self.right.visit()
+        pass
+    
+    def taint(self):
+        self.left.taint()
+        self.right.taint()
         if self.left.level == Level.Tainted or self.right.level == Level.Tainted:
             self.level = Level.Tainted
-
+        
     def parse(self):
         self.left.parse()      
         self.right.parse()
@@ -466,11 +688,18 @@ class BoolOp(Node):
     def print_node(self):
         return("{}{}{} ".format(self.left.print_node(),self.op.value,self.right.print_node()))
 
+    def path_visit(self, G):
+        pass
+
     def visit(self):
         self.left.visit()
         self.right.visit()
         if self.left.level == Level.Tainted or self.right.level == Level.Tainted:
             self.level = Level.Tainted
+
+    
+    def taint(self):
+        pass
 
     def parse(self):
         self.left.parse()      
@@ -489,9 +718,16 @@ class Sequence(Node):
             st.append(n.print_node())
         return(", ".join(st))
 
-    def visit(self):
+    def path_visit(self, G):
         for n in self.nodes:
-            n.visit()
+            n.path_visit(G)
+            
+    def visit(self):
+        pass
+    
+    def taint(self):
+        for n in self.nodes:
+            n.taint()
             if isinstance(n,Name) and n.level == Level.Tainted:
                 self.level = Level.Tainted
 
@@ -509,18 +745,36 @@ class Body(Node):
     def visit(self):
         self.nodes.visit()
         
+    def path_visit(self, G):
+        return(self.nodes.path_visit(G))
+
+    def taint(self):
+        pass
+
     def parse(self):
         self.nodes.parse()
 
 class Module(Node):
     def __init__(self, ast):
         self.body = Body(ast['body'])
+
     
     def print_node(self):
         return(self.body.print_node())
     
+    def path_visit(self, G):
+        pass
+
     def visit(self):
         self.body.visit()
+
+    def path_visit(self):
+        G = []
+        self.body.path_visit(G)
+        return G
+    
+    def taint(self):
+        pass
 
     def parse(self):
         self.body.parse()
@@ -531,26 +785,74 @@ def parse(ast):
         node.parse()
 
 
+
+def dfs(graph, visited, paths):
+    if len(graph) == 0:
+        paths += [visited]
+        return visited
+
+    if isinstance(graph[0], list):
+        dfs(graph[0][0] + ["POP"] + graph[1:], visited, paths)
+        dfs(graph[0][1] + ["POP"]  + graph[1:], visited, paths)
+    
+    else:
+        return dfs(graph[1:], visited + [graph[0]], paths)
+
+
 def Main(filename, config_file):
+    global SYMTAB
+    global CONFIG
+    global STACK
+    global SOURCES
+    global SANITIZERS
+    global SINKS
     ast = {}
 
     with open(config_file, "r") as f:
         CONFIG = json.loads(f.read())
 
     with open(filename, "r") as f:
-    # with open(filename, "r") as f:
         ast = json.loads(f.read())
     
     module = Module(ast)
     module.parse()
     module.visit()
-    print(module.print_node())
-    print("=========== final symtab ==============")
-    for v in SYMTAB:
-        print("{}: {}".format(v, SYMTAB[v].level))
+    G = module.path_visit()
+    # print(module.print_node())
+
+    print("=======================================")
+    dfs(G, [], PATHS)
+    # print(G)
+    for a in PATHS:
+        print("{} steps - {}".format(len(a), a))
+
+    
+    for path in PATHS:
+        for node in path:
+            if node == "POP":
+                STACK = STACK[1:]
+                print("POP", STACK)
+            else:
+                node.taint()
+        
+        print("========================================")
+        for s in SYMTAB:
+            print("{} : {}".format(SYMTAB[s].id, SYMTAB[s].level))
+
+        SYMTAB = {}
+        STACK = []
+        SOURCES = []
+        SANITIZERS = []
+        SINKS = []
+
+
+    # print(module.print_node())
+    # print("=========== final symtab ==============")
+    # for v in SYMTAB:
+    #     print("{}: {}".format(v, SYMTAB[v].level))
 
 parser = argparse.ArgumentParser(prog='parse', description="to be continued", 
-            usage="python parse slice.json")
+            usage="python parse slice.json < --config config.json >")
 parser.add_argument('filename', type=str)
 parser.add_argument('--config', type=str, default="config.json")
 
