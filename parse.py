@@ -46,6 +46,7 @@ class BoolOpString(enum.Enum):
 
 def log_vulnerability():
     def recursive_log(current, depth):
+        # print("Current: ", current)
         if current[-1].get('type',None) != None:
             if current[-1]['type'] != 'sanitizer':
                 print(depth*"\t" + current[-1]['desc']) 
@@ -106,7 +107,7 @@ def get_outter_test():
         if len(s) != 0:
             return s
     
-    return None
+    return []
 
 
 def retNode(node): #TODO: Refactor this, no need to give the entire node as an argument 
@@ -370,6 +371,7 @@ class IfExp(Node):
     def taint(self):
         global STACK
         ret = self.test.taint()
+        print (ret)
         STACK.insert(0, ret)
 
     def parse(self):
@@ -469,50 +471,81 @@ class Call(Node):
             return [{'type': "SOURCE", 'lineno': self.lineno, 'func': name }]
 
         # true if not sanitizer
-        if is_sanitizer(name):
-            self.level = Level.Tainted
+        elif is_sanitizer(name):
+            self.level = Level.Untainted
             # return outter-most tainted test
+
             tainters = []
             for t in get_outter_test():
                 if isinstance(t, dict):
                     tainters.append(t['func'])
                 else:
                     tainters.append(t.id)
+                    
+            if len(tainters) > 0:
+                self.level = Level.Tainted
+                for arg in self.args.nodes:
+                    name = ""
+                    
+                    if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
+                        name = arg.id
 
-            for arg in self.args.nodes:
-                name = ""
-                
-                if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
-                    name = arg.id
+                    bt_entry = {'lineno': self.lineno, 'from':tainters, 'desc': "line {}: '{}' tainted for being sanitized in the scope of branch with a tainted guard ('{}')".format(self.lineno, name, "' or '".join(tainters))}
 
-                bt_entry = {'lineno': self.lineno, 'from':tainters, 'desc': "line {}: '{}' tainted for being sanitized in the scope of branch with a tainted guard ('{}')".format(self.lineno, name, "' or '".join(tainters))}
-
-                if BT.get(name, None) != None:
-                    BT[name].append(bt_entry)
-                else:
-                    BT[name] = [bt_entry]
-            return
-
-
-            for arg in self.args.nodes:
-                if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
-                    SYMTAB[arg.id].level = Level.Untainted
-                    SANITIZERS.append({'func': name, 'var':arg.id, 'lineno':self.lineno })
-                    if BT.get(arg.id, None) != None:
-                        BT[arg.id].append({'type':'sanitizer', 'lineno':self.lineno, 'from':[name], 'desc': "line {}: '{}' sanitized by call to '{}'".format(self.lineno, arg.id, name)})
+                    if BT.get(name, None) != None:
+                        BT[name].append(bt_entry)
                     else:
-                        BT[arg.id] = {'type':'sanitizer', 'lineno':self.lineno, 'from':[name], 'desc': "line {}: '{}' sanitized by call to '{}'".format(self.lineno, arg.id, name)}
+                        BT[name] = [bt_entry]
+            else:
+                for arg in self.args.nodes:
+                    if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Tainted:
+                        SYMTAB[arg.id].level = Level.Untainted
+                        arg.level = Level.Untainted
+                        SANITIZERS.append({'func': name, 'var':arg.id, 'lineno':self.lineno })
+                        if BT.get(arg.id, None) != None:
+                            BT[arg.id].append({'type':'sanitizer', 'lineno':self.lineno, 'from':[name], 'desc': "line {}: '{}' sanitized by call to '{}'".format(self.lineno, arg.id, name)})
+                        else:
+                            BT[arg.id] = {'type':'sanitizer', 'lineno':self.lineno, 'from':[name], 'desc': "line {}: '{}' sanitized by call to '{}'".format(self.lineno, arg.id, name)}
         
         elif is_sink(name):
-            for arg in self.args.nodes:
-                if isinstance(arg, Name) or len(SANITIZERS) > 0:
-                    if SYMTAB[arg.id].level == Level.Tainted:
-                        self.level = Level.Tainted
-                        SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno, 'vulnerable':True})
-                    else: 
-                        SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno, 'vulnerable':False})
-                        
+            # if in a tainted guard, everything is tainted
+            tainters = []
+            for t in get_outter_test():
+                if isinstance(t, dict):
+                    tainters.append(t['func'])
+                else:
+                    tainters.append(t.id)
+                    
+            if len(tainters) > 0:
+                self.level = Level.Tainted
+                for arg in self.args.nodes:
+                    var_name = ""
+                    
+                    if isinstance(arg, Name) and SYMTAB[arg.id].level == Level.Untainted:
+                        var_name = arg.id
+
+                    bt_entry = {'lineno': self.lineno, 'from':tainters, 'desc': "line {}: '{}' cast as tainted for being used in the scope of branch with a tainted guard ('{}')".format(self.lineno, var_name, "' or '".join(tainters))}
+
+                    if BT.get(var_name, None) != None:
+                        BT[var_name].append(bt_entry)
+                    else:
+                        BT[var_name] = [bt_entry]
+                    
+                    SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno, 'vulnerable':True})
                     log_vulnerability()
+                    # only used as an argument, so the variable level didnt change
+                    # and so it is not relevant to keep a backtrace after logging
+                    BT[var_name] = BT[var_name][:-1]
+            else:
+                for arg in self.args.nodes:
+                    if isinstance(arg, Name) or len(SANITIZERS) > 0:
+                        if SYMTAB[arg.id].level == Level.Tainted:
+                            self.level = Level.Tainted
+                            SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno, 'vulnerable':True})
+                        else: 
+                            SINKS.append({'func': name, 'var':arg.id, 'lineno':self.lineno, 'vulnerable':False})
+                            
+                        log_vulnerability()
 
 
 
@@ -558,17 +591,24 @@ class Name(Node):
 
     def taint(self):
         if not self.in_call:
-            if self.id not in SYMTAB:
-                SYMTAB[self.id] = self
+            if self.id in ["True", "False"]:
+                self.level = Level.Untainted   
+            else:
+                if self.id not in SYMTAB:
+                    SYMTAB[self.id] = self
 
-                if self.type == "Load":
-                    # set level to tainted
-                    self.level = Level.Tainted
-                    BT[self.id] = [{'type':'unknown', 'lineno': self.lineno, 'from': None , 'desc': 'line {}: {} not initialized'.format(self.lineno, self.id)}]
+                    if self.type == "Load":
+                        # set level to tainted
+                        self.level = Level.Tainted
+                        BT[self.id] = [{'type':'unknown', 'lineno': self.lineno, 'from': None , 'desc': 'line {}: {} not initialized'.format(self.lineno, self.id)}]
 
-            self.level = SYMTAB[self.id].level
+                self.level = SYMTAB[self.id].level
         
-        return [self]
+        if self.level == Level.Untainted:
+            return []
+        else:
+            return [self]
+
         
 
         # print("({}) {}".format(self.level, self.id))
@@ -631,8 +671,6 @@ class int(Node):
     def path_visit(self, G):
         pass
 
-
-    
     def taint(self):
         pass
 
@@ -740,13 +778,13 @@ class Assign(Node):
                 name = ""
                 if isinstance(self.value.node, Name):
                     name = self.value.node.id
-                    desc = "line {}: {} untainted by an assignment to '{}'".format(self.lineno, self.targets.node.id, self.value.node.id)
+                    desc = "line {}: {} potentially untainted by an assignment to '{}'".format(self.lineno, self.targets.node.id, self.value.node.id)
                 elif isinstance(self.value.node, Call):
                     name = self.value.node.func.id if isinstance(self.value.node.func, Name) else self.value.node.func.attr
-                    desc = "line {}: {} untainted by safe call to '{}'".format(self.lineno, self.targets.node.id, name)
+                    desc = "line {}: {} potentially untainted by safe call to '{}'".format(self.lineno, self.targets.node.id, name)
                 else:
                     name = "assignment to a constant"
-                    desc = "line {}: {} untainted by safe call to a constant".format(self.lineno, self.targets.node.id)
+                    desc = "line {}: {} potentially untainted by assignment to a constant".format(self.lineno, self.targets.node.id)
 
                 if BT.get(self.targets.node.id, None) != None:
                     BT[self.targets.node.id].append({'lineno': self.lineno, 'from':[name], 'desc': desc})
